@@ -11,14 +11,22 @@ class TestDataSeeder extends Seeder
     public function run()
     {
         // Создаем тестового пользователя
-        $user = User::create([
-            'name' => 'Test User',
+        $user = User::firstOrCreate([
             'email' => 'test@example.com',
-            'password' => bcrypt('password'),
-        ]);
+        ],
+            [
+                'name' => 'Test User',
+                'password' => bcrypt('password'),
+            ]);
+        if (!$user->profile) {
+            $user->profile()->create([
+                'bio' => 'Пока ничего о себе не рассказал',
+                'avatar' => null,
+            ]);
+        }
 
         // Обновляем профиль пользователя
-        $user->profile->update([
+        $user?->profile?->update([
             'bio' => 'AI энтузиаст и разработчик промптов',
             'website' => 'https://example.com',
             'notifications_enabled' => true,
@@ -72,4 +80,4 @@ class TestDataSeeder extends Seeder
             $user->prompts()->create($promptData);
         }
     }
-} 
+}

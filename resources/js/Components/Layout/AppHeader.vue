@@ -2,35 +2,47 @@
   <n-layout-header bordered class="bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
     <div class="max-w-7xl mx-auto px-4 h-16">
       <div class="flex items-center justify-between h-full">
-        <!-- Левая часть -->
-        <div class="flex items-center space-x-8">
-          <!-- Лого -->
+        <!-- Лого (прижат влево) -->
+        <div class="w-1/4">
           <n-button text class="!text-2xl !text-white hover:!text-indigo-400 transition-colors">
             <template #icon>
               <div class="i-carbon-api mr-2" />
             </template>
-            AI Prompt Builder
+            AI Prompt
           </n-button>
-          
-          <!-- Навигация -->
-          <nav class="hidden md:flex items-center space-x-4">
-            <n-button text class="!text-gray-300 hover:!text-white">
-              <template #icon>
-                <div class="i-carbon-document mr-1" />
-              </template>
-              Промпты
-            </n-button>
-            <n-button text class="!text-gray-300 hover:!text-white">
-              <template #icon>
-                <div class="i-carbon-star mr-1" />
-              </template>
-              Избранное
-            </n-button>
-          </nav>
         </div>
 
-        <!-- Правая часть -->
-        <div class="flex items-center space-x-4">
+        <!-- Навигация (по центру) -->
+        <nav class="flex-1 flex items-center justify-center space-x-6">
+          <n-button text class="!text-gray-300 hover:!text-white">
+            <template #icon>
+              <div class="i-carbon-document mr-1" />
+            </template>
+            Мои промпты
+          </n-button>
+          <n-button text class="!text-gray-300 hover:!text-white">
+            <template #icon>
+              <div class="i-carbon-star mr-1" />
+            </template>
+            Избранное
+          </n-button>
+          <n-button text class="!text-gray-300 hover:!text-white">
+            <template #icon>
+              <div class="i-carbon-trending-topic mr-1" />
+            </template>
+            Популярные
+          </n-button>
+        </nav>
+
+        <!-- Правая часть (прижата вправо) -->
+        <div class="w-1/4 flex items-center justify-end space-x-4">
+          <!-- Поиск -->
+          <n-button circle class="!bg-gray-800 hover:!bg-gray-700 !border-gray-700">
+            <template #icon>
+              <div class="i-carbon-search text-gray-300" />
+            </template>
+          </n-button>
+
           <!-- Уведомления -->
           <n-badge :value="3" processing>
             <n-button circle class="!bg-gray-800 hover:!bg-gray-700 !border-gray-700">
@@ -42,11 +54,17 @@
 
           <!-- Профиль -->
           <n-dropdown trigger="click" :options="userMenuOptions" @select="handleSelect">
-            <n-button circle class="!bg-gray-800 hover:!bg-gray-700 !border-gray-700">
-              <template #icon>
-                <div class="i-carbon-user-avatar text-gray-300" />
-              </template>
-            </n-button>
+            <div class="flex items-center space-x-3 cursor-pointer">
+              <span class="text-sm text-gray-300 hidden md:inline-block">
+                {{ user?.email }}
+              </span>
+              <n-avatar
+                :src="user?.profile?.avatar || '/default-avatar.png'"
+                round
+                :size="32"
+                class="!bg-gray-800 !border-gray-700"
+              />
+            </div>
           </n-dropdown>
         </div>
       </div>
@@ -62,6 +80,7 @@ import {
   NButton,
   NDropdown,
   NBadge,
+  NAvatar,
   useMessage,
 } from 'naive-ui'
 
@@ -90,6 +109,20 @@ const userMenuOptions = [
   {
     type: 'divider',
     key: 'd1',
+  },
+  {
+    label: () =>
+      h(
+        'div',
+        {
+          class: 'flex items-center space-x-2',
+        },
+        [
+          h('div', { class: 'i-carbon-user-profile' }),
+          h('span', 'Профиль'),
+        ]
+      ),
+    key: 'profile',
   },
   {
     label: () =>
@@ -131,6 +164,8 @@ const handleSelect = (key) => {
     form.post('/logout')
   } else if (key === 'settings') {
     message.info('Настройки (в разработке)')
+  } else if (key === 'profile') {
+    window.location.href = '/profile'
   }
 }
 </script> 

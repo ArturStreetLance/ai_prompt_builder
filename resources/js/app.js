@@ -16,7 +16,7 @@ import {
   NLayoutFooter,
   NButton,
   NDropdown,
-  NBadge,
+  NBadge
 } from 'naive-ui'
 
 const naive = create({
@@ -29,7 +29,7 @@ const naive = create({
     NLayoutFooter,
     NButton,
     NDropdown,
-    NBadge,
+    NBadge
   ]
 })
 

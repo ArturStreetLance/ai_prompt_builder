@@ -54,6 +54,10 @@ class User extends Authenticatable
     {
         return $this->hasMany(SavedPrompt::class);
     }
+    public function prompts(): HasMany
+    {
+        return $this->hasMany(Prompt::class);
+    }
 
     public function ratings(): HasMany
     {
