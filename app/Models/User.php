@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class User extends Authenticatable
 {
@@ -44,6 +45,11 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
+    public function profile(): HasOne
+    {
+        return $this->hasOne(Profile::class);
+    }
+
     public function savedPrompts(): HasMany
     {
         return $this->hasMany(SavedPrompt::class);
@@ -52,5 +58,12 @@ class User extends Authenticatable
     public function ratings(): HasMany
     {
         return $this->hasMany(Rating::class);
+    }
+
+    protected static function booted()
+    {
+        static::created(function ($user) {
+            $user->profile()->create();
+        });
     }
 }
