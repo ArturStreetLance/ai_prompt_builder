@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PromptTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use App\Services\PromptCacheService;
 
 class PromptTemplateController extends Controller
 {
@@ -61,5 +62,76 @@ class PromptTemplateController extends Controller
     {
         $promptTemplate->delete();
         return response()->json(null, 204);
+    }
+
+    public function compile(Request $request)
+    {
+        $validated = $request->validate([
+            'template_ids' => 'required|array',
+            'template_ids.*' => 'exists:prompt_templates,id',
+            'name' => 'required|string|max:255'
+        ]);
+
+        $promptService = new PromptCacheService();
+        $compiledPrompt = $promptService->getCachedPrompt($validated['template_ids']);
+
+        // Сохраняем промпт
+        $savedPrompt = auth()->user()->savedPrompts()->create([
+            'name' => $validated['name'],
+            'template_ids' => $validated['template_ids'],
+            'compiled_content' => $compiledPrompt
+        ]);
+
+        return response()->json([
+            'prompt' => $compiledPrompt,
+            'saved' => $savedPrompt
+        ]);
+    }
+
+    public function saved()
+    {
+        $savedPrompts = auth()->user()->savedPrompts;
+        return response()->json($savedPrompts);
+    }
+
+    public function export(Request $request)
+    {
+        $promptIds = $request->input('prompt_ids');
+        $prompts = PromptTemplate::whereIn('id', $promptIds)
+            ->with('categories')
+            ->get();
+
+        return response()->json([
+            'prompts' => $prompts,
+            'version' => '1.0',
+            'exported_at' => now()
+        ]);
+    }
+
+    public function import(Request $request)
+    {
+        $validated = $request->validate([
+            'prompts' => 'required|array',
+            'version' => 'required|string'
+        ]);
+
+        $imported = collect($validated['prompts'])->map(function ($prompt) {
+            $newPrompt = PromptTemplate::create([
+                'name' => $prompt['name'],
+                'content' => $prompt['content'],
+                'version' => $prompt['version'],
+                'metadata' => $prompt['metadata'] ?? null
+            ]);
+
+            if (!empty($prompt['categories'])) {
+                $newPrompt->categories()->sync(
+                    collect($prompt['categories'])->pluck('id')
+                );
+            }
+
+            return $newPrompt;
+        });
+
+        return response()->json($imported);
     }
 } 

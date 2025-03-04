@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PromptTemplate;
 use Illuminate\Support\Facades\Cache;
 
 class PromptCacheService
@@ -11,13 +12,22 @@ class PromptCacheService
         $cacheKey = 'prompt_' . implode('_', $templateIds);
         
         return Cache::remember($cacheKey, 3600, function () use ($templateIds) {
-            // Логика компиляции промпта
             return $this->compilePrompt($templateIds);
         });
     }
 
     private function compilePrompt(array $templateIds)
     {
-        // Здесь логика сборки промпта из шаблонов
+        $templates = PromptTemplate::whereIn('id', $templateIds)
+            ->orderByRaw('FIELD(id, ' . implode(',', $templateIds) . ')')
+            ->get();
+
+        return $templates->pluck('content')->join("\n");
+    }
+
+    public function invalidateCache(array $templateIds)
+    {
+        $cacheKey = 'prompt_' . implode('_', $templateIds);
+        Cache::forget($cacheKey);
     }
 } 

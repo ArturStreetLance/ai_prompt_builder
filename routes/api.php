@@ -2,6 +2,9 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\PromptTemplateController;
+use App\Http\Controllers\Api\RatingController;
+use App\Http\Controllers\Auth\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,4 +19,17 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
+});
+
+// Публичные маршруты
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+// Защищенные маршруты
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::apiResource('prompt-templates', PromptTemplateController::class);
+    Route::post('prompt-templates/{promptTemplate}/rate', [RatingController::class, 'rate']);
+    Route::post('prompt-templates/compile', [PromptTemplateController::class, 'compile']);
+    Route::get('prompt-templates/saved', [PromptTemplateController::class, 'saved']);
 });

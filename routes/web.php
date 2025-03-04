@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,5 +15,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return view('welcome');
-});
+    return Inertia::render('PromptBuilder');
+})->name('prompt.builder');
+
+// Перенаправляем все остальные маршруты на Vue приложение
+Route::get('{all}', function () {
+    return Inertia::render('PromptBuilder');
+})->where('all', '.*');
