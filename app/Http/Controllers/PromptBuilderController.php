@@ -12,7 +12,9 @@ class PromptBuilderController extends Controller
     public function index()
     {
         $user = auth()->user();
-        
+       /* dd($user->prompts()
+            ->orderBy('created_at', 'desc')
+            ->get());*/
         return Inertia::render('PromptBuilder', [
             'user' => $user,
             'prompts' => $user->prompts()
@@ -25,4 +27,4 @@ class PromptBuilderController extends Controller
                 ->get(),
         ]);
     }
-} 
+}

@@ -17,6 +17,7 @@ return new class extends Migration
             $table->decimal('rating', 3, 2)->default(0);
             $table->integer('usage_count')->default(0);
             $table->boolean('is_public')->default(true);
+            $table->boolean('is_favorite')->default(false);
             $table->timestamps();
         });
     }

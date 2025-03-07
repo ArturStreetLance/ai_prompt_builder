@@ -5,7 +5,7 @@ use Inertia\Inertia;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ProfileController;
-
+use App\Http\Controllers\PromptBuilderController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -28,10 +28,11 @@ Route::post('register', [RegisterController::class, 'register']);
 
 // Защищенные маршруты
 Route::middleware(['auth'])->group(function () {
-    Route::get('/', function () {
+    Route::get('/', [PromptBuilderController::class, 'index'])->name('prompt.builder');
+    /*Route::get('/', function () {
         return Inertia::render('PromptBuilder');
-    })->name('prompt.builder');
-    
+    })->name('prompt.builder');*/
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('profile.avatar');

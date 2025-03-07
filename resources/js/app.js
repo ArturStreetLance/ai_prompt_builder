@@ -4,6 +4,7 @@ import '../css/app.css';
 import { createApp, h } from 'vue';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import { Icon } from '@iconify/vue';
 
 // Naive UI
 import {
@@ -42,6 +43,7 @@ createInertiaApp({
         return createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(naive)
+            .component('Icon', Icon)
             .mount(el);
     },
     progress: {
