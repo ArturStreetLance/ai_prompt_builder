@@ -1,19 +1,9 @@
 <template>
   <div class="h-full flex flex-col">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-semibold text-white">Предпросмотр промпта</h2>
-      <div class="flex items-center space-x-2">
-        <n-button type="default" @click="clearContent">
-          Очистить
-        </n-button>
-        <n-button type="primary" :loading="loading" @click="handleSubmit">
-          Отправить
-        </n-button>
-      </div>
-    </div>
+    <h2 class="text-xl font-semibold text-white mb-4">Предпросмотр промпта</h2>
 
     <div
-      class="flex-1 bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4"
+      class="flex-1 relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4"
       @dragover.prevent
     >
       <n-input
@@ -21,12 +11,35 @@
         v-model:value="content"
         type="textarea"
         placeholder="Перетащите сюда промпты или начните ввод..."
-        :autosize="{ maxRows: 100 }"
+        :autosize="{ minRows: 8, maxRows: 100 }"
         @drop.prevent="handleDrop"
         @dragover.prevent
         @dragenter.prevent="handleDragEnter"
         @dragleave.prevent="handleDragLeave"
       />
+
+      <!-- Кнопки управления -->
+      <div 
+        v-if="content.trim()"
+        class="absolute bottom-6 right-6 flex items-center gap-2 transition-opacity duration-200"
+        :class="content.trim() ? 'opacity-100' : 'opacity-0'"
+      >
+        <n-button 
+          type="default" 
+          @click="clearContent"
+          class="bg-gray-700/50 hover:bg-gray-600/50 text-gray-300"
+        >
+          Очистить
+        </n-button>
+        <n-button 
+          type="primary" 
+          :loading="loading" 
+          @click="handleSubmit"
+          class="bg-indigo-600/90 hover:bg-indigo-500/90"
+        >
+          Отправить
+        </n-button>
+      </div>
     </div>
   </div>
 </template>
@@ -153,10 +166,9 @@ const insertPromptAtCursor = (prompt, position = null) => {
     textarea.focus()
   })
 
-  // Отмечаем промпт как использованный и увеличиваем счетчик
+  // Просто добавляем промпт в список использованных, без increment-usage
   if (!usedPrompts.value.has(prompt.id)) {
     usedPrompts.value.add(prompt.id)
-    form.post(`/prompts/${prompt.id}/increment-usage`)
   }
 }
 
@@ -171,6 +183,13 @@ const handleSubmit = async () => {
   
   loading.value = true
   try {
+    // Сначала увеличиваем счетчики использования для всех промптов
+    const incrementPromises = Array.from(usedPrompts.value).map(promptId => 
+      form.post(`/prompts/${promptId}/increment-usage`)
+    )
+    await Promise.all(incrementPromises)
+
+    // Затем отправляем сформированный текст
     await form.post('/prompts/submit', {
       content: content.value,
       promptIds: Array.from(usedPrompts.value)
@@ -188,7 +207,22 @@ const handleSubmit = async () => {
 }
 
 .n-input :deep(textarea) {
-  min-height: 300px !important;
+  min-height: 200px !important;
   cursor: text !important;
+  padding-bottom: 60px !important; /* Место для кнопок */
+  font-size: 1.1rem !important;
+  line-height: 1.6 !important;
+}
+
+/* Стили для кнопок */
+.n-button {
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.n-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 </style>
