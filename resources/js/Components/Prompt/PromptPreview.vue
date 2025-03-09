@@ -3,19 +3,48 @@
     <h2 class="text-xl font-semibold text-white mb-4">Предпросмотр промпта</h2>
 
     <div
-      class="flex-1 relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4"
-      @dragover.prevent
+      class="flex-1 relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4 transition-all duration-300"
+      :class="{
+        'border-indigo-500/50 shadow-lg shadow-indigo-500/20 scale-[1.01]': isDragOver,
+        'border-dashed': isDragOver
+      }"
+      @dragover.prevent="handleDragOver"
+      @drop.prevent="handleDrop"
+      @dragenter.prevent="handleDragEnter"
+      @dragleave.prevent="handleDragLeave"
     >
+      <!-- Плавающий текст при перетаскивании -->
+      <div
+        v-if="isDragging"
+        class="floating-text"
+        :style="{
+          '--x': dragPosition.x + 'px',
+          '--y': dragPosition.y + 'px'
+        }"
+      >
+        <div class="floating-content">
+          <div class="font-semibold">{{ draggedPrompt?.name }}</div>
+          <div class="text-sm opacity-75">{{ draggedPrompt?.content }}</div>
+        </div>
+      </div>
+
+      <!-- Оверлей при перетаскивании -->
+      <div
+        v-if="isDragOver"
+        class="absolute inset-0 bg-indigo-500/10 rounded-lg pointer-events-none
+               flex items-center justify-center"
+      >
+        <div class="text-indigo-300 text-lg font-medium animate-pulse">
+          Отпустите для вставки промпта
+        </div>
+      </div>
+
       <n-input
         ref="textareaRef"
         v-model:value="content"
         type="textarea"
         placeholder="Перетащите сюда промпты или начните ввод..."
         :autosize="{ minRows: 8, maxRows: 100 }"
-        @drop.prevent="handleDrop"
-        @dragover.prevent
-        @dragenter.prevent="handleDragEnter"
-        @dragleave.prevent="handleDragLeave"
       />
 
       <!-- Кнопки управления -->
@@ -55,9 +84,15 @@ const form = useForm({})
 const textareaRef = ref(null)
 const usedPrompts = ref(new Set())
 const lastCursorPosition = ref(0)
+const isDragOver = ref(false)
+const dragPosition = ref({ x: 0, y: 0 })
+const draggedPrompt = ref(null)
+const isDragging = ref(false)
 
 // Сохраняем позицию курсора при перемещении мыши над textarea
 const handleDragEnter = (event) => {
+  event.preventDefault()
+  isDragOver.value = true
   const textarea = event.target
   if (textarea.tagName === 'TEXTAREA') {
     // Получаем позицию курсора относительно текста
@@ -76,8 +111,18 @@ const handleDragEnter = (event) => {
   }
 }
 
-const handleDragLeave = () => {
-  // Можно добавить дополнительную логику при необходимости
+const handleDragLeave = (event) => {
+  event.preventDefault()
+  // Проверяем, что мышь действительно покинула элемент, а не перешла на дочерний элемент
+  const rect = event.target.getBoundingClientRect()
+  const x = event.clientX
+  const y = event.clientY
+  
+  if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
+    isDragOver.value = false
+    isDragging.value = false
+    draggedPrompt.value = null
+  }
 }
 
 // Функция для определения позиции в тексте на основе координат
@@ -130,12 +175,79 @@ const getTextPositionFromCoords = (textarea, x, y) => {
   return position + char
 }
 
-// Обработка drop события
+const handleDragOver = (event) => {
+  event.preventDefault()
+  if (!isDragOver.value) {
+    isDragOver.value = true
+  }
+  
+  // Обновляем позицию относительно контейнера
+  const rect = event.currentTarget.getBoundingClientRect()
+  dragPosition.value = {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  }
+  
+  // Если это первое перетаскивание, получаем данные промпта
+  if (!draggedPrompt.value) {
+    try {
+      draggedPrompt.value = JSON.parse(event.dataTransfer.getData('text/plain'))
+      isDragging.value = true
+    } catch (e) {
+      console.error('Ошибка при получении данных промпта:', e)
+    }
+  }
+}
+
 const handleDrop = (event) => {
   event.preventDefault()
+  isDragOver.value = false
+  isDragging.value = false
   try {
-    const prompt = JSON.parse(event.dataTransfer.getData('text/plain'))
-    insertPromptAtCursor(prompt, lastCursorPosition.value)
+    const prompt = draggedPrompt.value || JSON.parse(event.dataTransfer.getData('text/plain'))
+    const dropPoint = {
+      x: event.clientX,
+      y: event.clientY
+    }
+    
+    // Создаем элемент для анимации падения
+    const fallEffect = document.createElement('div')
+    fallEffect.className = 'fall-effect'
+    fallEffect.innerHTML = `
+      <div class="fall-content">
+        <div class="font-semibold">${prompt.name}</div>
+        <div class="text-sm opacity-75">${prompt.content.substring(0, 50)}...</div>
+      </div>
+    `
+    
+    // Устанавливаем начальную позицию
+    const rect = event.currentTarget.getBoundingClientRect()
+    const startX = dropPoint.x - rect.left
+    const startY = dropPoint.y - rect.top
+    
+    fallEffect.style.setProperty('--start-x', `${startX}px`)
+    fallEffect.style.setProperty('--start-y', `${startY}px`)
+    
+    event.currentTarget.appendChild(fallEffect)
+    
+    // Запускаем анимацию падения и вставляем текст
+    setTimeout(() => {
+      event.currentTarget.removeChild(fallEffect)
+      insertPromptAtCursor(prompt, getTextPositionFromCoords(event.target, startX, startY))
+      
+      // Добавляем эффект волны
+      const rippleEffect = document.createElement('div')
+      rippleEffect.className = 'ripple-effect'
+      rippleEffect.style.setProperty('--x', `${startX}px`)
+      rippleEffect.style.setProperty('--y', `${startY}px`)
+      event.currentTarget.appendChild(rippleEffect)
+      
+      setTimeout(() => {
+        event.currentTarget.removeChild(rippleEffect)
+      }, 1000)
+    }, 300)
+    
+    draggedPrompt.value = null
   } catch (e) {
     console.error('Ошибка при обработке перетаскивания:', e)
   }
@@ -224,5 +336,134 @@ const handleSubmit = async () => {
 .n-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Анимация при наведении */
+.scale-\[1\.01\] {
+  transform: scale(1.01);
+}
+
+/* Анимация пульсации текста */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Плавающий текст при перетаскивании */
+.floating-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(
+    calc(var(--x) - 50%),
+    calc(var(--y) - 50%)
+  );
+  transition: transform 0.1s ease-out;
+}
+
+.floating-content {
+  padding: 0.75rem 1rem;
+  background: rgba(99, 102, 241, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 0.5rem;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  max-width: 300px;
+  transform-origin: center;
+  animation: floatPulse 2s ease-in-out infinite;
+}
+
+@keyframes floatPulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.02);
+  }
+}
+
+/* Анимация падения */
+.fall-effect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(
+    calc(var(--start-x) - 50%),
+    calc(var(--start-y) - 50%)
+  );
+  animation: fallDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.fall-content {
+  padding: 0.75rem 1rem;
+  background: rgba(99, 102, 241, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 0.5rem;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  max-width: 300px;
+  transform-origin: center;
+  animation: fallRotate 0.3s ease-out forwards;
+}
+
+@keyframes fallDown {
+  0% {
+    transform: translate(
+      calc(var(--start-x) - 50%),
+      calc(var(--start-y) - 50%)
+    );
+  }
+  100% {
+    transform: translate(
+      calc(var(--start-x) - 50%),
+      calc(var(--start-y) - 50%) translateY(10px)
+    );
+    opacity: 0;
+  }
+}
+
+@keyframes fallRotate {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  100% {
+    transform: rotate(10deg) scale(0.8);
+  }
+}
+
+/* Эффект волны при вставке */
+.ripple-effect {
+  position: absolute;
+  top: var(--y);
+  left: var(--x);
+  width: 4px;
+  height: 4px;
+  background: rgba(99, 102, 241, 0.5);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: ripple 1s cubic-bezier(0, 0, 0.2, 1);
+}
+
+@keyframes ripple {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 0.5;
+    filter: brightness(2);
+  }
+  100% {
+    width: 400px;
+    height: 400px;
+    opacity: 0;
+    filter: brightness(1);
+  }
 }
 </style>

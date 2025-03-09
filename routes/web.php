@@ -40,6 +40,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/prompts/{prompt}/increment-usage', [PromptController::class, 'incrementUsage'])
         ->name('prompts.increment-usage');
+
+    // Добавляем новый маршрут для toggle-favorite
+    Route::post('/prompts/{prompt}/toggle-favorite', [PromptController::class, 'toggleFavorite'])
+        ->name('prompts.toggle-favorite');
 });
 
 // Перенаправляем все остальные маршруты на Vue приложение
