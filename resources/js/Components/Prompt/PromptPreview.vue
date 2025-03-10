@@ -45,6 +45,8 @@
         type="textarea"
         placeholder="Перетащите сюда промпты или начните ввод..."
         :autosize="{ minRows: 8, maxRows: 100 }"
+        @input="() => debounceResize(updateTextareaStyles)"
+        class="resize-observer-optimized"
       />
 
       <!-- Кнопки управления -->
@@ -74,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { NButton, NInput } from 'naive-ui'
 import { useForm } from '@inertiajs/vue3'
 
@@ -88,23 +90,60 @@ const isDragOver = ref(false)
 const dragPosition = ref({ x: 0, y: 0 })
 const draggedPrompt = ref(null)
 const isDragging = ref(false)
+const dragData = ref(null)
+const resizeTimeout = ref(null)
 
-// Сохраняем позицию курсора при перемещении мыши над textarea
+// Добавим функцию для безопасного получения данных промпта
+const getPromptData = (event) => {
+  try {
+    // Пробуем разные форматы данных
+    const formats = ['application/json', 'text/plain']
+    let data = null
+    
+    for (const format of formats) {
+      try {
+        const rawData = event.dataTransfer.getData(format)
+        if (rawData) {
+          data = JSON.parse(rawData)
+          if (data && data.name && data.content) {
+            return data
+          }
+        }
+      } catch (e) {
+        console.log(`Не удалось получить данные в формате ${format}`)
+      }
+    }
+    
+    return null
+  } catch (e) {
+    console.error('Ошибка при получении данных промпта:', e)
+    return null
+  }
+}
+
 const handleDragEnter = (event) => {
   event.preventDefault()
   isDragOver.value = true
+  
+  // Пытаемся получить данные промпта при первом входе
+  if (!dragData.value) {
+    const data = getPromptData(event)
+    if (data) {
+      dragData.value = JSON.stringify(data)
+      draggedPrompt.value = data
+      isDragging.value = true
+    }
+  }
+
   const textarea = event.target
   if (textarea.tagName === 'TEXTAREA') {
-    // Получаем позицию курсора относительно текста
     const rect = textarea.getBoundingClientRect()
     const x = event.clientX - rect.left
     const y = event.clientY - rect.top
     
-    // Находим позицию в тексте на основе координат мыши
     const position = getTextPositionFromCoords(textarea, x, y)
     if (position !== -1) {
       lastCursorPosition.value = position
-      // Устанавливаем курсор в эту позицию
       textarea.setSelectionRange(position, position)
       textarea.focus()
     }
@@ -113,7 +152,6 @@ const handleDragEnter = (event) => {
 
 const handleDragLeave = (event) => {
   event.preventDefault()
-  // Проверяем, что мышь действительно покинула элемент, а не перешла на дочерний элемент
   const rect = event.target.getBoundingClientRect()
   const x = event.clientX
   const y = event.clientY
@@ -121,7 +159,11 @@ const handleDragLeave = (event) => {
   if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
     isDragOver.value = false
     isDragging.value = false
-    draggedPrompt.value = null
+    // Не очищаем dragData здесь, только если действительно отменяем перетаскивание
+    if (!isDragOver.value) {
+      draggedPrompt.value = null
+      dragData.value = null
+    }
   }
 }
 
@@ -188,13 +230,13 @@ const handleDragOver = (event) => {
     y: event.clientY - rect.top
   }
   
-  // Если это первое перетаскивание, получаем данные промпта
-  if (!draggedPrompt.value) {
-    try {
-      draggedPrompt.value = JSON.parse(event.dataTransfer.getData('text/plain'))
+  // Пытаемся получить данные промпта только если его еще нет
+  if (!dragData.value && !draggedPrompt.value) {
+    const data = getPromptData(event)
+    if (data) {
+      dragData.value = JSON.stringify(data)
+      draggedPrompt.value = data
       isDragging.value = true
-    } catch (e) {
-      console.error('Ошибка при получении данных промпта:', e)
     }
   }
 }
@@ -203,12 +245,34 @@ const handleDrop = (event) => {
   event.preventDefault()
   isDragOver.value = false
   isDragging.value = false
+  
   try {
-    const prompt = draggedPrompt.value || JSON.parse(event.dataTransfer.getData('text/plain'))
+    let prompt
+    if (draggedPrompt.value) {
+      prompt = draggedPrompt.value
+    } else if (dragData.value) {
+      prompt = JSON.parse(dragData.value)
+    } else {
+      // Последняя попытка получить данные
+      prompt = getPromptData(event)
+      if (!prompt) {
+        throw new Error('Нет данных промпта')
+      }
+    }
+
+    // Проверяем, что у промпта есть необходимые поля
+    if (!prompt.name || !prompt.content) {
+      throw new Error('Некорректные данные промпта')
+    }
+
     const dropPoint = {
       x: event.clientX,
       y: event.clientY
     }
+    
+    // Получаем контейнер заранее
+    const container = event.currentTarget
+    if (!container) return
     
     // Создаем элемент для анимации падения
     const fallEffect = document.createElement('div')
@@ -221,35 +285,43 @@ const handleDrop = (event) => {
     `
     
     // Устанавливаем начальную позицию
-    const rect = event.currentTarget.getBoundingClientRect()
+    const rect = container.getBoundingClientRect()
     const startX = dropPoint.x - rect.left
     const startY = dropPoint.y - rect.top
     
     fallEffect.style.setProperty('--start-x', `${startX}px`)
     fallEffect.style.setProperty('--start-y', `${startY}px`)
     
-    event.currentTarget.appendChild(fallEffect)
+    // Добавляем элемент
+    container.appendChild(fallEffect)
     
     // Запускаем анимацию падения и вставляем текст
     setTimeout(() => {
-      event.currentTarget.removeChild(fallEffect)
-      insertPromptAtCursor(prompt, getTextPositionFromCoords(event.target, startX, startY))
+      if (fallEffect && fallEffect.parentNode) {
+        fallEffect.parentNode.removeChild(fallEffect)
+      }
+
+      insertPromptAtCursor(prompt, getTextPositionFromCoords(container.querySelector('textarea'), startX, startY))
       
       // Добавляем эффект волны
       const rippleEffect = document.createElement('div')
       rippleEffect.className = 'ripple-effect'
       rippleEffect.style.setProperty('--x', `${startX}px`)
       rippleEffect.style.setProperty('--y', `${startY}px`)
-      event.currentTarget.appendChild(rippleEffect)
       
+      container.appendChild(rippleEffect)
       setTimeout(() => {
-        event.currentTarget.removeChild(rippleEffect)
+        if (rippleEffect && rippleEffect.parentNode) {
+          rippleEffect.parentNode.removeChild(rippleEffect)
+        }
       }, 1000)
     }, 300)
-    
-    draggedPrompt.value = null
   } catch (e) {
     console.error('Ошибка при обработке перетаскивания:', e)
+  } finally {
+    // Очищаем все данные
+    draggedPrompt.value = null
+    dragData.value = null
   }
 }
 
@@ -311,9 +383,51 @@ const handleSubmit = async () => {
     loading.value = false
   }
 }
+
+// Добавляем функцию для дебаунса изменений размера
+const debounceResize = (callback, delay = 100) => {
+  if (resizeTimeout.value) {
+    clearTimeout(resizeTimeout.value)
+  }
+  resizeTimeout.value = setTimeout(callback, delay)
+}
+
+// Обновляем стили для textarea
+const updateTextareaStyles = () => {
+  const textarea = textareaRef.value?.$el.querySelector('textarea')
+  if (textarea) {
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, window.innerHeight * 0.8)}px`
+  }
+}
+
+// Добавляем хук жизненного цикла для очистки
+onBeforeUnmount(() => {
+  if (resizeTimeout.value) {
+    clearTimeout(resizeTimeout.value)
+  }
+})
 </script>
 
 <style scoped>
+/* Стили для оптимизации ResizeObserver */
+.resize-observer-optimized {
+  contain: content;
+  overflow: hidden;
+}
+
+.resize-observer-optimized :deep(textarea) {
+  min-height: 200px !important;
+  cursor: text !important;
+  padding-bottom: 60px !important;
+  font-size: 1.1rem !important;
+  line-height: 1.6 !important;
+  transition: height 0.2s ease;
+  will-change: height;
+  overflow-y: hidden;
+}
+
+/* Остальные стили остаются без изменений */
 .n-input {
   background: transparent !important;
 }

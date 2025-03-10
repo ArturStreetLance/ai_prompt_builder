@@ -134,15 +134,23 @@ const handleDragStart = (event) => {
     event.dataTransfer.setData('text/plain', JSON.stringify(props.prompt))
     event.dataTransfer.effectAllowed = 'copy'
     
-    // Создаем невидимый элемент для dragImage
-    const emptyImage = document.createElement('div')
-    emptyImage.style.display = 'none'
-    document.body.appendChild(emptyImage)
-    event.dataTransfer.setDragImage(emptyImage, 0, 0)
+    // Создаем видимый элемент для dragImage
+    const dragPreview = document.createElement('div')
+    dragPreview.className = 'drag-preview'
+    dragPreview.innerHTML = `
+        <div class="drag-preview-content">
+            <div class="font-semibold">${props.prompt.name}</div>
+            <div class="text-sm opacity-75">${props.prompt.content.substring(0, 50)}...</div>
+        </div>
+    `
+    document.body.appendChild(dragPreview)
+    
+    // Устанавливаем dragImage
+    event.dataTransfer.setDragImage(dragPreview, dragPreview.offsetWidth / 2, dragPreview.offsetHeight / 2)
     
     // Удаляем элемент после начала перетаскивания
     setTimeout(() => {
-        document.body.removeChild(emptyImage)
+        document.body.removeChild(dragPreview)
     }, 0)
 }
 
@@ -283,6 +291,29 @@ const handleDragEnd = () => {
     -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* Стили для превью при перетаскивании */
+.drag-preview {
+    position: fixed;
+    top: -100vh;
+    left: -100vw;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.drag-preview-content {
+    padding: 0.75rem 1rem;
+    background: rgba(99, 102, 241, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 0.5rem;
+    color: white;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 </style>
 
