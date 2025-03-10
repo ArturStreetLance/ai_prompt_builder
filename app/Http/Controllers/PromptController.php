@@ -5,102 +5,101 @@ namespace App\Http\Controllers;
 use App\Models\Prompt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 
 class PromptController extends Controller
 {
+    /**
+     * Создание нового промпта
+     */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'content' => 'required|string',
-            'category' => 'required|string',
+        // Валидация
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|min:3|max:100',
+            'category' => 'required|string|in:Копирайтинг,Разработка,Маркетинг,SEO,Творчество',
+            'content' => 'required|string|min:10',
             'is_public' => 'boolean'
         ]);
 
-        $prompt = $request->user()->prompts()->create($validated);
+        if ($validator->fails()) {
+            return back()->withErrors($validator->errors());
+        }
 
-        return back()->with('message', 'Промпт успешно создан');
+        try {
+            // Создаем промпт через отношение пользователя
+            $prompt = Auth::user()->prompts()->create([
+                'name' => $request->name,
+                'category' => $request->category,
+                'content' => $request->content,
+                'is_public' => $request->is_public,
+                'rating' => 0,
+                'is_favorite' => false
+            ]);
+
+            return back()->with([
+                'success' => true,
+                'message' => 'Промпт успешно создан',
+                'prompt' => $prompt
+            ]);
+
+        } catch (\Exception $e) {
+            return back()->with([
+                'success' => false,
+                'message' => 'Ошибка при создании промпта'
+            ]);
+        }
     }
 
     /**
-     * Обновить рейтинг промпта
+     * Обновление рейтинга промпта
      */
     public function updateRating(Request $request, Prompt $prompt)
     {
-        //dd($request->all());
+        $validator = Validator::make($request->all(), [
+            'rating' => 'required|numeric|min:0|max:5'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Некорректное значение рейтинга'
+            ], 422);
+        }
+
         try {
-            \Log::info('Request data:', [
-                'all' => $request->all(),
-                'prompt_id' => $prompt->id,
-                'prompt_data' => $prompt->toArray()
-            ]);
-
-            $request->validate([
-                'rating' => 'required|numeric|min:0|max:5'
-            ]);
-
-            \Log::info('Updating rating', [
-                'prompt_id' => $prompt->id,
-                'old_rating' => $prompt->rating,
-                'new_rating' => $request->rating
-            ]);
-
-            $result = $prompt->update([
-                'rating' => $request->rating
-            ]);
-
-            \Log::info('Update result:', [
-                'success' => $result,
-                'new_prompt_data' => $prompt->fresh()->toArray()
-            ]);
-
+            $prompt->update(['rating' => $request->rating]);
+            
             return response()->json([
                 'success' => true,
+                'message' => 'Рейтинг обновлен',
                 'rating' => $prompt->rating
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error updating rating', [
-                'prompt_id' => $prompt->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
             return response()->json([
                 'success' => false,
-                'message' => 'Ошибка при обновлении рейтинга: ' . $e->getMessage()
+                'message' => 'Ошибка при обновлении рейтинга'
             ], 500);
         }
     }
 
     /**
-     * Переключить статус избранного для промпта
+     * Переключение статуса избранного
      */
     public function toggleFavorite(Prompt $prompt)
     {
         try {
-            \Log::info('Toggling favorite', [
-                'prompt_id' => $prompt->id,
-                'old_state' => $prompt->is_favorite
-            ]);
-
-            $prompt->update([
-                'is_favorite' => !$prompt->is_favorite
-            ]);
-
+            $prompt->update(['is_favorite' => !$prompt->is_favorite]);
+            
             return response()->json([
                 'success' => true,
+                'message' => 'Статус избранного обновлен',
                 'is_favorite' => $prompt->is_favorite
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error toggling favorite', [
-                'prompt_id' => $prompt->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
             return response()->json([
                 'success' => false,
-                'message' => 'Ошибка при изменении статуса избранного'
+                'message' => 'Ошибка при обновлении статуса избранного'
             ], 500);
         }
     }

@@ -121,9 +121,15 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { NBadge, NRate, NButton } from 'naive-ui'
-import { useForm } from '@inertiajs/vue3'
 import { Icon } from '@iconify/vue'
 import axios from 'axios'
+
+// Настраиваем axios для работы с Laravel
+axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest'
+const token = document.head.querySelector('meta[name="csrf-token"]')
+if (token) {
+    axios.defaults.headers.common['X-CSRF-TOKEN'] = token.content
+}
 
 const props = defineProps({
     prompt: {
@@ -134,7 +140,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:rating', 'update:favorite'])
 const isExpanded = ref(false)
-const form = useForm({})
 const isDragging = ref(false)
 const isUpdating = ref(false)
 
@@ -148,30 +153,14 @@ const toggleExpand = () => {
 
 const toggleFavorite = async () => {
     if (isUpdating.value) return
-    
-    const previousState = localIsFavorite.value
-    localIsFavorite.value = !previousState // Оптимистичное обновление
     isUpdating.value = true
     
     try {
-        const response = await form.post(`/prompts/${props.prompt.id}/toggle-favorite`, {}, {
-            preserveScroll: true,
-            onSuccess: () => {
-                emit('update:favorite', localIsFavorite.value)
-            },
-            onError: (errors) => {
-                // Откатываем изменения при ошибке
-                localIsFavorite.value = previousState
-                console.error('Ошибка обновления избранного:', errors)
-            }
-        })
-
-        if (!response.success) {
-            localIsFavorite.value = previousState
-        }
+        const response = await axios.post(`/prompts/${props.prompt.id}/toggle-favorite`)
+        localIsFavorite.value = !localIsFavorite.value
+        emit('update:favorite', localIsFavorite.value)
     } catch (error) {
         console.error('Ошибка при обновлении избранного:', error)
-        localIsFavorite.value = previousState
     } finally {
         isUpdating.value = false
     }
@@ -179,36 +168,14 @@ const toggleFavorite = async () => {
 
 const updateRating = async (value) => {
     if (isUpdating.value) return
-    
-    const previousRating = localRating.value
-    localRating.value = value // Оптимистичное обновление
     isUpdating.value = true
     
-    // Логируем данные перед отправкой
-    console.log('Отправляем данные:', {
-        prompt_id: props.prompt.id,
-        rating: value
-    })
-    
     try {
-        form.transform(data => ({
-            ...data,
-            rating: value
-        }))
-
-        await form.post(`/prompts/${props.prompt.id}/update-rating`, {
-            onSuccess: () => {
-                console.log('Рейтинг успешно обновлен:', value)
-                emit('update:rating', value)
-            },
-            onError: (errors) => {
-                console.error('Ошибка валидации:', errors)
-                localRating.value = previousRating
-            }
-        })
+        const response = await axios.post(`/prompts/${props.prompt.id}/update-rating`, { rating: value })
+        localRating.value = value
+        emit('update:rating', value)
     } catch (error) {
         console.error('Ошибка при обновлении рейтинга:', error)
-        localRating.value = previousRating
     } finally {
         isUpdating.value = false
     }

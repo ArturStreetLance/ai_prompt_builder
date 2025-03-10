@@ -54,7 +54,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(SavedPrompt::class);
     }
-    public function prompts(): HasMany
+
+    /**
+     * Получить промпты пользователя
+     */
+    public function prompts()
     {
         return $this->hasMany(Prompt::class);
     }
