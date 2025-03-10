@@ -32,9 +32,26 @@
 
             <!-- Рейтинг -->
             <div class="flex items-center gap-1 shrink-0">
-                <n-rate :value="prompt.rating" readonly size="small" />
+                <n-rate
+                    :value="localRating"
+                    :readonly="isUpdating"
+                    size="small"
+                    @update:value="updateRating"
+                >
+                    <template #default="{ index }">
+                        <n-icon 
+                            :size="16" 
+                            :class="[
+                                index <= localRating ? 'text-yellow-400' : 'text-gray-400',
+                                { 'opacity-50': isUpdating }
+                            ]"
+                        >
+                            <Icon icon="carbon:star-filled" />
+                        </n-icon>
+                    </template>
+                </n-rate>
                 <span class="text-xs text-gray-400 min-w-[2rem]">
-                    {{ prompt.rating }}
+                    {{ localRating.toFixed(1) }}
                 </span>
             </div>
 
@@ -50,19 +67,27 @@
                 <n-button
                     circle
                     size="tiny"
-                    :type="prompt.is_favorite ? 'warning' : 'default'"
+                    :type="localIsFavorite ? 'warning' : 'default'"
+                    :disabled="isUpdating"
                     @click.stop="toggleFavorite"
-                    class="border-none bg-transparent hover:scale-110 transition-transform"
+                    class="border-none bg-transparent hover:scale-110 transition-transform relative"
                 >
                     <template #icon>
                         <Icon
-                            :icon="prompt.is_favorite ? 'carbon:star-filled' : 'carbon:star'"
+                            :icon="localIsFavorite ? 'carbon:star-filled' : 'carbon:star'"
                             :class="[
-                                prompt.is_favorite ? 'text-yellow-400' : 'text-gray-400',
-                                'group-hover:text-yellow-300 transition-colors text-lg'
+                                localIsFavorite ? 'text-yellow-400' : 'text-gray-400',
+                                'group-hover:text-yellow-300 transition-colors text-lg',
+                                { 'opacity-50': isUpdating }
                             ]"
                         />
                     </template>
+                    
+                    <!-- Индикатор загрузки -->
+                    <div v-if="isUpdating" 
+                         class="absolute inset-0 flex items-center justify-center">
+                        <div class="w-4 h-4 border-2 border-t-transparent border-yellow-400 rounded-full animate-spin"></div>
+                    </div>
                 </n-button>
             </div>
         </div>
@@ -98,6 +123,7 @@ import { ref, computed } from 'vue'
 import { NBadge, NRate, NButton } from 'naive-ui'
 import { useForm } from '@inertiajs/vue3'
 import { Icon } from '@iconify/vue'
+import axios from 'axios'
 
 const props = defineProps({
     prompt: {
@@ -106,16 +132,86 @@ const props = defineProps({
     }
 })
 
+const emit = defineEmits(['update:rating', 'update:favorite'])
 const isExpanded = ref(false)
 const form = useForm({})
 const isDragging = ref(false)
+const isUpdating = ref(false)
+
+// Локальное состояние для оптимистичных обновлений
+const localRating = ref(props.prompt.rating)
+const localIsFavorite = ref(props.prompt.is_favorite)
 
 const toggleExpand = () => {
     isExpanded.value = !isExpanded.value
 }
 
-const toggleFavorite = () => {
-    form.post(`/prompts/${props.prompt.id}/toggle-favorite`)
+const toggleFavorite = async () => {
+    if (isUpdating.value) return
+    
+    const previousState = localIsFavorite.value
+    localIsFavorite.value = !previousState // Оптимистичное обновление
+    isUpdating.value = true
+    
+    try {
+        const response = await form.post(`/prompts/${props.prompt.id}/toggle-favorite`, {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                emit('update:favorite', localIsFavorite.value)
+            },
+            onError: (errors) => {
+                // Откатываем изменения при ошибке
+                localIsFavorite.value = previousState
+                console.error('Ошибка обновления избранного:', errors)
+            }
+        })
+
+        if (!response.success) {
+            localIsFavorite.value = previousState
+        }
+    } catch (error) {
+        console.error('Ошибка при обновлении избранного:', error)
+        localIsFavorite.value = previousState
+    } finally {
+        isUpdating.value = false
+    }
+}
+
+const updateRating = async (value) => {
+    if (isUpdating.value) return
+    
+    const previousRating = localRating.value
+    localRating.value = value // Оптимистичное обновление
+    isUpdating.value = true
+    
+    // Логируем данные перед отправкой
+    console.log('Отправляем данные:', {
+        prompt_id: props.prompt.id,
+        rating: value
+    })
+    
+    try {
+        form.transform(data => ({
+            ...data,
+            rating: value
+        }))
+
+        await form.post(`/prompts/${props.prompt.id}/update-rating`, {
+            onSuccess: () => {
+                console.log('Рейтинг успешно обновлен:', value)
+                emit('update:rating', value)
+            },
+            onError: (errors) => {
+                console.error('Ошибка валидации:', errors)
+                localRating.value = previousRating
+            }
+        })
+    } catch (error) {
+        console.error('Ошибка при обновлении рейтинга:', error)
+        localRating.value = previousRating
+    } finally {
+        isUpdating.value = false
+    }
 }
 
 const categoryColor = computed(() => {
@@ -137,21 +233,41 @@ const handleDragStart = (event) => {
     // Создаем видимый элемент для dragImage
     const dragPreview = document.createElement('div')
     dragPreview.className = 'drag-preview'
-    dragPreview.innerHTML = `
-        <div class="drag-preview-content">
-            <div class="font-semibold">${props.prompt.name}</div>
-            <div class="text-sm opacity-75">${props.prompt.content.substring(0, 50)}...</div>
-        </div>
-    `
+    dragPreview.style.position = 'absolute'
+    dragPreview.style.top = event.clientY + 'px'
+    dragPreview.style.left = event.clientX + 'px'
+    dragPreview.style.zIndex = '9999'
+    dragPreview.style.pointerEvents = 'none'
+    dragPreview.style.transform = 'translate(-50%, -50%)'
+    
+    const content = document.createElement('div')
+    content.style.padding = '0.75rem 1rem'
+    content.style.background = 'rgba(99, 102, 241, 0.95)'
+    content.style.backdropFilter = 'blur(8px)'
+    content.style.borderRadius = '0.5rem'
+    content.style.color = '#FFFFFF'
+    content.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.3)'
+    content.style.border = '2px solid rgba(255, 255, 255, 0.1)'
+    content.style.maxWidth = '300px'
+    content.style.fontSize = '0.875rem'
+    content.style.lineHeight = '1.25rem'
+    content.style.transform = 'scale(0.8)'
+    content.style.display = '-webkit-box'
+    content.style.webkitLineClamp = '3'
+    content.style.webkitBoxOrient = 'vertical'
+    content.style.overflow = 'hidden'
+    content.textContent = props.prompt.content
+    
+    dragPreview.appendChild(content)
     document.body.appendChild(dragPreview)
     
     // Устанавливаем dragImage
-    event.dataTransfer.setDragImage(dragPreview, dragPreview.offsetWidth / 2, dragPreview.offsetHeight / 2)
+    event.dataTransfer.setDragImage(dragPreview, 10, 10)
     
     // Удаляем элемент после начала перетаскивания
-    setTimeout(() => {
+    requestAnimationFrame(() => {
         document.body.removeChild(dragPreview)
-    }, 0)
+    })
 }
 
 const handleDragEnd = () => {
@@ -295,11 +411,11 @@ const handleDragEnd = () => {
 
 /* Стили для превью при перетаскивании */
 .drag-preview {
-    position: fixed;
-    top: -100vh;
-    left: -100vw;
-    z-index: -1;
+    position: absolute;
+    z-index: 9999;
     pointer-events: none;
+    transform: translate(-50%, -50%);
+    opacity: 1;
 }
 
 .drag-preview-content {
@@ -307,13 +423,52 @@ const handleDragEnd = () => {
     background: rgba(99, 102, 241, 0.95);
     backdrop-filter: blur(8px);
     border-radius: 0.5rem;
-    color: white;
+    color: #ffffff !important;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
     border: 2px solid rgba(255, 255, 255, 0.1);
     max-width: 300px;
-    white-space: nowrap;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transform: scale(0.8);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+/* Убираем конфликтующие стили */
+.drag-preview .text-gray-300,
+.drag-preview p {
+    color: #ffffff !important;
+}
+
+/* Добавим стили для анимации обновления рейтинга */
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.text-yellow-400 {
+    animation: pulse 0.3s ease-in-out;
+}
+
+/* Стиль для индикатора загрузки */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Анимация для кнопки избранного */
+.n-button:not(:disabled):hover .Icon {
+    transform: scale(1.2);
+}
+
+.n-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
 }
 </style>
 

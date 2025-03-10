@@ -14,12 +14,14 @@ class Prompt extends Model
         'rating',
         'usage_count',
         'is_public',
+        'is_favorite',
     ];
 
     protected $casts = [
         'rating' => 'float',
         'usage_count' => 'integer',
         'is_public' => 'boolean',
+        'is_favorite' => 'boolean',
     ];
 
     public function user(): BelongsTo
