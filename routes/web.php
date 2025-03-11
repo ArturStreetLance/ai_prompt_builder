@@ -52,6 +52,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/prompts', [PromptController::class, 'store'])->name('prompts.store');
     Route::post('/prompts/{prompt}/update-rating', [PromptController::class, 'updateRating'])->name('prompts.update-rating');
     Route::post('/prompts/{prompt}/toggle-favorite', [PromptController::class, 'toggleFavorite'])->name('prompts.toggle-favorite');
+    Route::post('/prompts/submit', [PromptController::class, 'submit'])->name('prompts.submit');
 });
 
 // Перенаправляем все остальные маршруты на Vue приложение

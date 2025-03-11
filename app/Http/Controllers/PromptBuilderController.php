@@ -23,16 +23,22 @@ class PromptBuilderController extends Controller
     public function index()
     {
         $user = Auth::user();
-       /* dd($user->prompts()
-            ->orderBy('created_at', 'desc')
-            ->get());*/
+ // Если кеша нет, получаем из БД и кешируем
+        // if (!$popularPrompts) {
+        //    $popularPrompts = Prompt::where('is_public', true)
+        //        ->orderByRaw('COALESCE(usage_count, 0) DESC')
+        //        ->orderByRaw('COALESCE(rating, 0) DESC')
+        //        ->take(15)
+        //        ->get();
+
+          //  Cache::tags(['prompts'])->put($cacheKey, $popularPrompts, now()->addHours(1));
+        //}
         return Inertia::render('PromptBuilder', [
             'user' => $user,
             'prompts' => $user->prompts()
                 ->orderBy('created_at', 'desc')
                 ->get(),
-            'popularPrompts' => Cache::tags(['prompts'])->get('popular_prompts_5') ?? 
-                $this->promptHistoryService->getPopularPrompts(5),
+            'popularPrompts' => $this->promptHistoryService->getPopularPrompts(15),
             'frequentPrompts' => $this->promptHistoryService->getUserFrequentPrompts(5),
         ]);
     }

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Collection;
 
 class Prompt extends Model
 {
@@ -48,10 +49,12 @@ class Prompt extends Model
         $this->increment('usage_count');
     }
 
-    public static function getPopular($limit = 10)
+    public static function getPopular(int $limit = 10): Collection
     {
-        return static::orderBy('usage_count', 'desc')
-            ->limit($limit)
+        return static::where('is_public', true)
+            ->orderByRaw('COALESCE(usage_count, 0) DESC')
+            ->orderByRaw('COALESCE(rating, 0) DESC')
+            ->take($limit)
             ->get();
     }
 

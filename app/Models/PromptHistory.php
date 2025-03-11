@@ -10,7 +10,12 @@ class PromptHistory extends Model
 {
     protected $fillable = [
         'user_id',
-        'final_prompt'
+        'final_prompt',
+        'used_prompts'
+    ];
+
+    protected $casts = [
+        'used_prompts' => 'array'
     ];
 
     public function user(): BelongsTo
@@ -20,8 +25,6 @@ class PromptHistory extends Model
 
     public function prompts(): BelongsToMany
     {
-        return $this->belongsToMany(Prompt::class, 'prompt_history_items')
-            ->withPivot('position')
-            ->withTimestamps();
+        return $this->belongsToMany(Prompt::class, 'prompt_history_items');
     }
 } 

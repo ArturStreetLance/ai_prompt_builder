@@ -15,24 +15,40 @@ class PromptHistoryService implements PromptHistoryServiceInterface
     /**
      * @inheritDoc
      */
-    public function recordUsage(array $usedPrompts, string $finalPrompt): PromptHistory
+    public function recordUsage(array $promptIds, string $finalPrompt): PromptHistory
     {
-        return DB::transaction(function () use ($usedPrompts, $finalPrompt) {
+        DB::beginTransaction();
+        try {
             // Создаем запись в истории
-            $history = PromptHistory::create([
-                'user_id' => Auth::id(),
-                'final_prompt' => $finalPrompt
+            $history = Auth::user()->promptHistories()->create([
+                'final_prompt' => $finalPrompt,
+                'used_prompts' => $promptIds
             ]);
 
-            // Связываем промпты с историей
-            $attachData = collect($usedPrompts)->mapWithKeys(function ($promptId, $position) {
-                return [$promptId => ['position' => $position]];
-            })->all();
+            // Прикрепляем промпты к истории с позициями
+            $promptsWithPosition = collect($promptIds)->map(function($id, $index) {
+                return ['prompt_id' => $id, 'position' => $index];
+            })->toArray();
+            
+            $history->prompts()->attach($promptsWithPosition);
 
-            $history->prompts()->attach($attachData);
+            // Обновляем счетчики использования одним запросом
+            DB::table('prompts')
+                ->whereIn('id', $promptIds)
+                ->update([
+                    'usage_count' => DB::raw('usage_count + 1'),
+                    'rating' => DB::raw('(rating * usage_count + 5) / (usage_count + 1)')
+                ]);
 
-            return $history->load('prompts');
-        });
+            // Очищаем кеш популярных промптов
+            Cache::tags(['prompts'])->flush();
+
+            DB::commit();
+            return $history;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
 
     /**
@@ -40,9 +56,17 @@ class PromptHistoryService implements PromptHistoryServiceInterface
      */
     public function getPopularPrompts(int $limit = 10): Collection
     {
-        return Cache::tags(['prompts'])->remember('popular_prompts_' . $limit, now()->addHours(1), function () use ($limit) {
-            return Prompt::getPopular($limit);
-        });
+        $cacheKey = 'popular_prompts_' . $limit;
+        
+        // Если кеш пуст, получаем и кешируем данные
+        if (!Cache::tags(['prompts'])->has($cacheKey)) {
+            $prompts = Prompt::getPopular($limit);
+            Cache::tags(['prompts'])->put($cacheKey, $prompts, now()->addHours(1));
+            return $prompts;
+        }
+        
+        // Возвращаем данные из кеша
+        return Cache::tags(['prompts'])->get($cacheKey);
     }
 
     /**

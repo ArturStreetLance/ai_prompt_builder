@@ -6,13 +6,16 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up()
     {
         Schema::create('prompt_histories', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->text('final_prompt');
-            $table->json('used_prompts');
+            $table->json('used_prompts')->nullable();
             $table->timestamps();
         });
     }
@@ -21,4 +24,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('prompt_histories');
     }
-}; 
+};

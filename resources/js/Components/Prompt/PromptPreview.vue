@@ -79,7 +79,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { NButton, NInput } from 'naive-ui'
-import { useForm } from '@inertiajs/vue3'
+import { useForm, router } from '@inertiajs/vue3'
 import axios from 'axios'
 
 const content = ref('')
@@ -330,18 +330,32 @@ const addToUsedPrompts = (promptId) => {
 // Обработчик отправки промпта
 const handleSubmit = async () => {
     try {
-        const response = await axios.post('/api/prompts/submit', {
-            final_prompt: content.value,
-            used_prompts: usedPrompts.value
-        })
+        loading.value = true;
+        await axios.post('/prompts/submit', {
+            content: content.value,
+            promptIds: usedPrompts.value
+        }, {
+            headers: {
+                'X-XSRF-TOKEN': document.cookie.match(/XSRF-TOKEN=([\w-]+)/)?.[1],
+            },
+            withCredentials: true
+        });
         
-        if (response.data.success) {
-            // Очищаем список использованных промптов
-            usedPrompts.value = []
-            emit('submit', response.data)
-        }
+        // Очищаем поле контента и промпты
+        content.value = '';
+        usedPrompts.value = [];
+        
+        // Обновляем данные через Inertia
+        router.visit(window.location.pathname, {
+            only: ['popularPrompts'],
+            preserveScroll: true,
+            preserveState: true
+        });
+        
     } catch (error) {
-        console.error('Error submitting prompt:', error)
+        console.error('Ошибка при отправке промпта:', error);
+    } finally {
+        loading.value = false;
     }
 }
 

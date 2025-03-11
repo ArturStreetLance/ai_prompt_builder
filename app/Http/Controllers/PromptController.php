@@ -144,7 +144,16 @@ class PromptController extends Controller
 
         if (!empty($validated['promptIds'])) {
             // Используем сервис для записи использования промптов
-            $this->promptHistoryService->recordUsage($validated['promptIds'], $validated['content']);
+            $this->promptHistoryService->recordUsage(
+                $validated['promptIds'], 
+                $validated['content']
+            );
+        } else {
+            // Если нет использованных промптов, просто создаем запись в истории
+            $history = Auth::user()->promptHistories()->create([
+                'final_prompt' => $validated['content'],
+                'used_prompts' => []
+            ]);
         }
 
         return back()->with('message', 'Промпты успешно отправлены');

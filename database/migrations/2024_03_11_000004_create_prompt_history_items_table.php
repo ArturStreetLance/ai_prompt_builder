@@ -12,11 +12,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('prompt_history_id')->constrained()->onDelete('cascade');
             $table->foreignId('prompt_id')->constrained()->onDelete('cascade');
-            $table->integer('position')->default(0); // позиция промпта в итоговом тексте
+            $table->integer('position')->default(0);
             $table->timestamps();
-
-            $table->unique(['prompt_history_id', 'prompt_id']);
-            $table->index(['prompt_id', 'created_at']);
         });
     }
 
