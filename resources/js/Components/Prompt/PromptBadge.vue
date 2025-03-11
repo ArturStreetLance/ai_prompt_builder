@@ -1,32 +1,31 @@
 <template>
     <div 
-    style="width: max-content;"
-        class="group relative transition-all duration-300 ease-out cursor-pointer shadow-lg min-w-0 w-fit"
+        class="group relative transition-all duration-300 ease-out cursor-pointer shadow-lg w-max"
         :class="[
             isExpanded ? 'fixed inset-4 z-50 bg-gray-900/50' : '',
-            { 'scale-95 opacity-50 border-dashed lift-effect': isDragging }
+            { 'opacity-50': isDragging }
         ]"
         draggable="true"
         @dragstart="handleDragStart"
         @dragend="handleDragEnd"
         @click="isExpanded = !isExpanded"
     >
-        <div v-if="isDragging" class="card-shadow"></div>
-        <div v-if="isDragging" class="tear-effect">
-            <div class="tear-line"></div>
-        </div>
         <!-- Бейдж -->
         <div v-if="!isExpanded"
-            class="flex items-center h-12 border-[3px] rounded-full w-max"
+            class="flex items-center h-12 border-[3px] rounded-full w-max relative overflow-hidden"
             :class="[badgeStyle.bg, badgeStyle.border]"
         >
+            <!-- Прогресс бар -->
+            <div v-if="isDragging" class="absolute left-0 top-0 h-1 bg-white/30">
+                <div class="h-full bg-white/60 progress-animation"></div>
+            </div>
+            
             <!-- Избранное -->
             <n-button
                 circle
                 size="small"
                 :type="localIsFavorite ? 'warning' : 'default'"
-                class="border-none bg-white/20 backdrop-blur-sm hover:scale-110 transition-transform shadow-md"
-                style="margin-right: 10px;"
+                class="border-none bg-white/20 backdrop-blur-sm hover:scale-110 transition-transform shadow-md mr-2.5"
                 @click.stop="handleFavoriteToggle"
             >
                 <template #icon>
@@ -42,8 +41,7 @@
 
             <!-- Название -->
             <span 
-                :class="['text-base font-bold truncate', badgeStyle.text]"
-                style="margin-right: 10px;"
+                :class="['text-base font-bold truncate mr-2.5', badgeStyle.text]"
             >
                 {{ prompt.name }}
             </span>
@@ -80,8 +78,7 @@
                         circle
                         size="small"
                         :type="localIsFavorite ? 'warning' : 'default'"
-                        class="border-none hover:scale-110 transition-transform shadow-md flex-shrink-0"
-                        style="margin-right: 10px;"
+                        class="border-none hover:scale-110 transition-transform shadow-md flex-shrink-0 mr-2.5"
                         @click.stop="handleFavoriteToggle"
                     >
                         <template #icon>
@@ -101,8 +98,8 @@
                 </div>
 
                 <!-- Контент и рейтинг -->
-                <div class="flex flex-col gap-4 pl-[46px]" @click.stop>
-                    <p class="prompt-content-style text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
+                <div class="flex flex-col gap-4 " @click.stop>
+                    <p class="block p-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] transition-all duration-300 ease-out text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
                         {{ prompt.content }}
                     </p>
 
@@ -235,168 +232,234 @@ const badgeStyle = computed(() => {
 
 const handleDragStart = (event) => {
     isDragging.value = true
-    isExpanded.value = true
+    isExpanded.value = false
     
     event.dataTransfer.setData('text/plain', JSON.stringify(props.prompt))
     event.dataTransfer.effectAllowed = 'copy'
     
-    // Создаем видимый элемент для dragImage
+    // Создаем превью с текстом промпта
     const dragPreview = document.createElement('div')
-    dragPreview.className = 'drag-preview'
-    dragPreview.style.position = 'absolute'
-    dragPreview.style.top = '-9999px' // Скрываем превью за пределами экрана
-    dragPreview.style.left = '-9999px'
+    dragPreview.className = 'drag-text-preview'
+    dragPreview.textContent = props.prompt.content
     
     document.body.appendChild(dragPreview)
-    event.dataTransfer.setDragImage(dragPreview, 10, 10)
     
-    requestAnimationFrame(() => {
-        document.body.removeChild(dragPreview)
-    })
+    // Обновляем позицию превью при перетаскивании
+    const updatePreviewPosition = (e) => {
+        if (dragPreview) {
+            dragPreview.style.left = (e.clientX + 10) + 'px'
+            dragPreview.style.top = (e.clientY + 10) + 'px'
+        }
+    }
+    
+    document.addEventListener('dragover', updatePreviewPosition)
+    
+    // Очищаем при завершении
+    const cleanup = () => {
+        document.removeEventListener('dragover', updatePreviewPosition)
+        if (dragPreview && dragPreview.parentNode) {
+            dragPreview.parentNode.removeChild(dragPreview)
+        }
+        
+        // Создаем анимацию падения на месте курсора
+        const dropEffect = document.createElement('div')
+        dropEffect.className = 'drop-animation'
+        dropEffect.textContent = props.prompt.name
+        dropEffect.style.left = (event.clientX - 50) + 'px'
+        dropEffect.style.top = event.clientY + 'px'
+        document.body.appendChild(dropEffect)
+        
+        // Удаляем эффект после завершения анимации
+        dropEffect.addEventListener('animationend', () => {
+            dropEffect.remove()
+        })
+    }
+    
+    document.addEventListener('dragend', cleanup, { once: true })
+    document.addEventListener('drop', cleanup, { once: true })
+    
+    // Скрываем стандартный превью
+    const emptyImg = new Image()
+    emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+    event.dataTransfer.setDragImage(emptyImg, 0, 0)
 }
 
 const handleDragEnd = () => {
     isDragging.value = false
-    isExpanded.value = false // Закрываем карточку после перетаскивания
+    isExpanded.value = false
 }
 </script>
 
-<style scoped>
-.prompt-content-style {
-    display: block;
-    padding: 12px 16px;
-    border-radius: 12px;
-    background: rgba(0, 0, 0, 0.03);
-    transition: all 0.3s ease-out;
+<style>
+.prompt-badge {
+  position: relative;
+  width: 300px;
+  background-color: rgba(31, 41, 55, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(75, 85, 99, 0.5);
+  border-radius: 0.5rem;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
 }
 
-.dark .prompt-content-style {
-    background: rgba(255, 255, 255, 0.03);
-}
-/* Стили для звезд рейтинга */
-:deep(.n-rate) {
-    display: inline-flex;
-    padding: 4px 12px;
-    border-radius: 9999px;
-    transition: all 0.3s ease-out;
+.prompt-badge:hover {
+  transform: scale(1.02);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
 }
 
-/* Убираем стандартные стили кнопки */
-:deep(.n-button) {
-    min-width: auto;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    transition: all 0.3s ease-out;
+.prompt-badge.expanded {
+  width: 400px;
+  z-index: 10;
 }
 
-:deep(.n-button.n-button--small) {
-    width: 36px;
-    height: 36px;
+.prompt-badge.dragging {
+  opacity: 0.5;
+}
+
+.prompt-badge .content {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.prompt-badge.expanded .content {
+  -webkit-line-clamp: unset;
+}
+
+.prompt-badge .drag-handle {
+  cursor: grab;
+}
+
+.prompt-badge .drag-handle:active {
+  cursor: grabbing;
+}
+
+.prompt-badge .favorite-button {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.prompt-badge:hover .favorite-button {
+  opacity: 1;
+}
+
+.prompt-badge .favorite-button.active {
+  opacity: 1;
 }
 
 /* Анимации для трансформации */
 .group {
-    transform-origin: top left;
+  transform-origin: top left;
+  transition: all 0.3s ease-out;
 }
 
 .group > div {
-    transform-origin: top left;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: top left;
+  transition: all 0.3s ease-out;
 }
 
 /* Анимация для контента */
 [v-if] {
-    animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  animation: fade-in 0.3s ease-out;
 }
 
 /* Эффект отрыва */
 .lift-effect {
-    animation: liftCard 0.3s ease-out forwards;
-    transform-origin: center bottom;
-}
-
-@keyframes liftCard {
-    0% {
-        transform: scale(1) rotate(0deg);
-    }
-    20% {
-        transform: scale(1.02) rotate(-2deg);
-    }
-    100% {
-        transform: scale(0.95) rotate(0deg);
-    }
+  opacity: 0.5;
 }
 
 /* Тень при отрыве */
 .card-shadow {
-    position: absolute;
-    inset: -5px;
-    background: radial-gradient(
-        circle at center,
-        rgba(255, 255, 255, 0.2),
-        transparent 70%
-    );
-    border-radius: inherit;
-    z-index: -1;
+  position: absolute;
+  inset: -5px;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2), transparent 70%);
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  animation: shadow-pulse 1s ease-in-out infinite;
+}
+
+/* Утилиты для фонов */
+.bg-tear-pattern {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.2) 2px,
+    rgba(255, 255, 255, 0.2) 4px
+  );
+}
+
+.bg-gradient-radial {
+  background: radial-gradient(circle at center, var(--tw-gradient-from), var(--tw-gradient-to) 70%);
+}
+
+/* Анимации */
+@keyframes fade-in {
+  from {
     opacity: 0;
-    animation: shadowPulse 1s ease-in-out infinite;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-@keyframes shadowPulse {
-    0%, 100% {
-        opacity: 0.3;
-        transform: translateY(5px) scale(1.05);
-    }
-    50% {
-        opacity: 0.15;
-        transform: translateY(8px) scale(1.1);
-    }
-}
-
-/* Эффект отрывания бумаги */
-.tear-effect {
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    right: 0;
-    height: 4px;
+/* Стили для превью текста при перетаскивании */
+.drag-text-preview {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    background: rgba(31, 41, 55, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    max-width: 300px;
+    color: white;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
-.tear-line {
-    position: absolute;
-    top: 0;
-    left: -10%;
-    right: -10%;
-    height: 100%;
-    background-image: repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 2px,
-        rgba(255, 255, 255, 0.2) 2px,
-        rgba(255, 255, 255, 0.2) 4px
-    );
-    animation: tearAway 0.5s ease-in-out infinite;
+/* Анимация падения при drop */
+.drop-animation {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    background: rgba(31, 41, 55, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    max-width: 300px;
+    color: white;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: drop-fall 0.6s cubic-bezier(.17,.67,.83,.67) forwards;
 }
 
-@keyframes tearAway {
+@keyframes drop-fall {
     0% {
-        transform: translateX(-5%);
+        opacity: 1;
+        transform: translateY(-20px);
+    }
+    70% {
+        opacity: 0.7;
+        transform: translateY(0);
     }
     100% {
-        transform: translateX(5%);
+        opacity: 0;
+        transform: translateY(10px);
     }
 }
 </style> 

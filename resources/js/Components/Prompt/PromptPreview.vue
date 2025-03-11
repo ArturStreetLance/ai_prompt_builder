@@ -3,11 +3,13 @@
     <h2 class="text-xl font-semibold text-white mb-4">Предпросмотр промпта</h2>
 
     <div
-      class="flex-1 relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4 transition-all duration-300"
+      class="flex-1 relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4"
       :class="{
         'border-indigo-500/50 shadow-lg shadow-indigo-500/20 scale-[1.01]': isDragOver,
-        'border-dashed': isDragOver
+        'border-dashed': isDragOver,
+        'collapsed': isCollapsed
       }"
+      @click="toggleCollapse"
       @dragover.prevent="handleDragOver"
       @drop.prevent="handleDrop"
       @dragenter.prevent="handleDragEnter"
@@ -16,23 +18,22 @@
       <!-- Плавающий текст при перетаскивании -->
       <div
         v-if="isDragging"
-        class="floating-text"
+        class="absolute pointer-events-none transform-gpu"
+        :class="{ 'opacity-0': !isDragging }"
         :style="{
-          '--x': dragPosition.x + 'px',
-          '--y': dragPosition.y + 'px'
+          transform: `translate(${dragPosition.x}px, ${dragPosition.y}px)`
         }"
       >
-        <div class="floating-content">
+        <div class="p-3 bg-indigo-600/95 backdrop-blur-sm rounded-lg shadow-lg border border-white/10 max-w-[300px] text-white scale-90">
           <div class="font-semibold">{{ draggedPrompt?.name }}</div>
-          <div class="text-sm opacity-75">{{ draggedPrompt?.content }}</div>
+          <div class="text-sm opacity-75 line-clamp-3">{{ draggedPrompt?.content }}</div>
         </div>
       </div>
 
       <!-- Оверлей при перетаскивании -->
       <div
         v-if="isDragOver"
-        class="absolute inset-0 bg-indigo-500/10 rounded-lg pointer-events-none
-               flex items-center justify-center"
+        class="absolute inset-0 bg-indigo-500/10 rounded-lg pointer-events-none flex items-center justify-center"
       >
         <div class="text-indigo-300 text-lg font-medium animate-pulse">
           Отпустите для вставки промпта
@@ -46,13 +47,13 @@
         placeholder="Перетащите сюда промпты или начните ввод..."
         :autosize="{ minRows: 8, maxRows: 100 }"
         @input="() => debounceResize(updateTextareaStyles)"
-        class="resize-observer-optimized"
+        class="resize-none"
       />
 
       <!-- Кнопки управления -->
       <div 
         v-if="content.trim()"
-        class="absolute bottom-6 right-6 flex items-center gap-2 transition-opacity duration-200"
+        class="absolute bottom-6 right-6 flex items-center gap-2"
         :class="content.trim() ? 'opacity-100' : 'opacity-0'"
       >
         <n-button 
@@ -79,12 +80,13 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { NButton, NInput } from 'naive-ui'
 import { useForm } from '@inertiajs/vue3'
+import axios from 'axios'
 
 const content = ref('')
 const loading = ref(false)
 const form = useForm({})
 const textareaRef = ref(null)
-const usedPrompts = ref(new Set())
+const usedPrompts = ref([])
 const lastCursorPosition = ref(0)
 const isDragOver = ref(false)
 const dragPosition = ref({ x: 0, y: 0 })
@@ -92,6 +94,8 @@ const draggedPrompt = ref(null)
 const isDragging = ref(false)
 const dragData = ref(null)
 const resizeTimeout = ref(null)
+const isCollapsed = ref(false)
+const emit = defineEmits(['submit'])
 
 // Добавим функцию для безопасного получения данных промпта
 const getPromptData = (event) => {
@@ -253,14 +257,12 @@ const handleDrop = (event) => {
     } else if (dragData.value) {
       prompt = JSON.parse(dragData.value)
     } else {
-      // Последняя попытка получить данные
       prompt = getPromptData(event)
       if (!prompt) {
         throw new Error('Нет данных промпта')
       }
     }
 
-    // Проверяем, что у промпта есть необходимые поля
     if (!prompt.name || !prompt.content) {
       throw new Error('Некорректные данные промпта')
     }
@@ -270,56 +272,17 @@ const handleDrop = (event) => {
       y: event.clientY
     }
     
-    // Получаем контейнер заранее
     const container = event.currentTarget
     if (!container) return
     
-    // Создаем элемент для анимации падения
-    const fallEffect = document.createElement('div')
-    fallEffect.className = 'fall-effect'
-    fallEffect.innerHTML = `
-      <div class="fall-content">
-        <div class="font-semibold">${prompt.name}</div>
-        <div class="text-sm opacity-75">${prompt.content.substring(0, 50)}...</div>
-      </div>
-    `
-    
-    // Устанавливаем начальную позицию
-    const rect = container.getBoundingClientRect()
-    const startX = dropPoint.x - rect.left
-    const startY = dropPoint.y - rect.top
-    
-    fallEffect.style.setProperty('--start-x', `${startX}px`)
-    fallEffect.style.setProperty('--start-y', `${startY}px`)
-    
-    // Добавляем элемент
-    container.appendChild(fallEffect)
-    
-    // Запускаем анимацию падения и вставляем текст
-    setTimeout(() => {
-      if (fallEffect && fallEffect.parentNode) {
-        fallEffect.parentNode.removeChild(fallEffect)
-      }
+    // Сразу вставляем текст
+    insertPromptAtCursor(prompt, getTextPositionFromCoords(container.querySelector('textarea'), dropPoint.x - container.getBoundingClientRect().left, dropPoint.y - container.getBoundingClientRect().top))
 
-      insertPromptAtCursor(prompt, getTextPositionFromCoords(container.querySelector('textarea'), startX, startY))
-      
-      // Добавляем эффект волны
-      const rippleEffect = document.createElement('div')
-      rippleEffect.className = 'ripple-effect'
-      rippleEffect.style.setProperty('--x', `${startX}px`)
-      rippleEffect.style.setProperty('--y', `${startY}px`)
-      
-      container.appendChild(rippleEffect)
-      setTimeout(() => {
-        if (rippleEffect && rippleEffect.parentNode) {
-          rippleEffect.parentNode.removeChild(rippleEffect)
-        }
-      }, 1000)
-    }, 300)
+    // Добавляем промпт в список использованных
+    addToUsedPrompts(prompt.id)
   } catch (e) {
     console.error('Ошибка при обработке перетаскивания:', e)
   } finally {
-    // Очищаем все данные
     draggedPrompt.value = null
     dragData.value = null
   }
@@ -349,39 +312,37 @@ const insertPromptAtCursor = (prompt, position = null) => {
     textarea.setSelectionRange(newPosition, newPosition)
     textarea.focus()
   })
-
-  // Просто добавляем промпт в список использованных, без increment-usage
-  if (!usedPrompts.value.has(prompt.id)) {
-    usedPrompts.value.add(prompt.id)
-  }
 }
 
 // Очистка контента
 const clearContent = () => {
   content.value = ''
-  usedPrompts.value.clear()
+  usedPrompts.value = []
 }
 
-const handleSubmit = async () => {
-  if (!content.value.trim()) return
-  
-  loading.value = true
-  try {
-    // Сначала увеличиваем счетчики использования для всех промптов
-    const incrementPromises = Array.from(usedPrompts.value).map(promptId => 
-      form.post(`/prompts/${promptId}/increment-usage`)
-    )
-    await Promise.all(incrementPromises)
+// Добавляем промпт в список использованных
+const addToUsedPrompts = (promptId) => {
+    if (!usedPrompts.value.includes(promptId)) {
+        usedPrompts.value.push(promptId)
+    }
+}
 
-    // Затем отправляем сформированный текст
-    await form.post('/prompts/submit', {
-      content: content.value,
-      promptIds: Array.from(usedPrompts.value)
-    })
-    clearContent()
-  } finally {
-    loading.value = false
-  }
+// Обработчик отправки промпта
+const handleSubmit = async () => {
+    try {
+        const response = await axios.post('/api/prompts/submit', {
+            final_prompt: content.value,
+            used_prompts: usedPrompts.value
+        })
+        
+        if (response.data.success) {
+            // Очищаем список использованных промптов
+            usedPrompts.value = []
+            emit('submit', response.data)
+        }
+    } catch (error) {
+        console.error('Error submitting prompt:', error)
+    }
 }
 
 // Добавляем функцию для дебаунса изменений размера
@@ -401,6 +362,17 @@ const updateTextareaStyles = () => {
   }
 }
 
+const toggleCollapse = (event) => {
+  // Игнорируем клик по кнопкам и хендлерам
+  if (
+    event.target.closest('.favorite-button') ||
+    event.target.closest('.drag-handle')
+  ) {
+    return
+  }
+  isCollapsed.value = !isCollapsed.value
+}
+
 // Добавляем хук жизненного цикла для очистки
 onBeforeUnmount(() => {
   if (resizeTimeout.value) {
@@ -409,175 +381,131 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
-/* Стили для оптимизации ResizeObserver */
-.resize-observer-optimized {
-  contain: content;
+<style>
+.resize-none {
+  resize: none;
+}
+
+.resize-none:focus {
+  outline: none;
+  --tw-ring-color: rgba(99, 102, 241, 0.5);
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.resize-observer-optimized :deep(textarea) {
-  min-height: 200px !important;
-  cursor: text !important;
-  padding-bottom: 60px !important;
-  font-size: 1.1rem !important;
-  line-height: 1.6 !important;
-  transition: height 0.2s ease;
-  will-change: height;
-  overflow-y: hidden;
+/* Стили для превью текста при перетаскивании */
+.drag-text-preview {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    background: rgba(31, 41, 55, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    max-width: 300px;
+    color: white;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transform: translate(-50%, -50%);
 }
 
-/* Остальные стили остаются без изменений */
-.n-input {
-  background: transparent !important;
+.prompt-badge {
+    position: relative;
+    width: 300px;
+    background-color: rgba(31, 41, 55, 0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(75, 85, 99, 0.5);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    cursor: pointer;
 }
 
-.n-input :deep(textarea) {
-  min-height: 200px !important;
-  cursor: text !important;
-  padding-bottom: 60px !important; /* Место для кнопок */
-  font-size: 1.1rem !important;
-  line-height: 1.6 !important;
+.prompt-badge:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
 }
 
-/* Стили для кнопок */
-.n-button {
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s ease;
-}
-
-.n-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-/* Анимация при наведении */
-.scale-\[1\.01\] {
-  transform: scale(1.01);
-}
-
-/* Анимация пульсации текста */
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Плавающий текст при перетаскивании */
-.floating-text {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 9999;
-  transform: translate(
-    calc(var(--x) - 50%),
-    calc(var(--y) - 50%)
-  );
-  transition: transform 0.1s ease-out;
-}
-
-.floating-content {
-  padding: 0.75rem 1rem;
-  background: rgba(99, 102, 241, 0.9);
-  backdrop-filter: blur(8px);
-  border-radius: 0.5rem;
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  max-width: 300px;
-  transform-origin: center;
-  animation: floatPulse 2s ease-in-out infinite;
-}
-
-@keyframes floatPulse {
-  0%, 100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-4px) scale(1.02);
-  }
-}
-
-/* Анимация падения */
-.fall-effect {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 9999;
-  transform: translate(
-    calc(var(--start-x) - 50%),
-    calc(var(--start-y) - 50%)
-  );
-  animation: fallDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.fall-content {
-  padding: 0.75rem 1rem;
-  background: rgba(99, 102, 241, 0.9);
-  backdrop-filter: blur(8px);
-  border-radius: 0.5rem;
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  max-width: 300px;
-  transform-origin: center;
-  animation: fallRotate 0.3s ease-out forwards;
-}
-
-@keyframes fallDown {
-  0% {
-    transform: translate(
-      calc(var(--start-x) - 50%),
-      calc(var(--start-y) - 50%)
-    );
-  }
-  100% {
-    transform: translate(
-      calc(var(--start-x) - 50%),
-      calc(var(--start-y) - 50%) translateY(10px)
-    );
-    opacity: 0;
-  }
-}
-
-@keyframes fallRotate {
-  0% {
-    transform: rotate(0deg) scale(1);
-  }
-  100% {
-    transform: rotate(10deg) scale(0.8);
-  }
-}
-
-/* Эффект волны при вставке */
-.ripple-effect {
-  position: absolute;
-  top: var(--y);
-  left: var(--x);
-  width: 4px;
-  height: 4px;
-  background: rgba(99, 102, 241, 0.5);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  animation: ripple 1s cubic-bezier(0, 0, 0.2, 1);
-}
-
-@keyframes ripple {
-  0% {
-    width: 0;
-    height: 0;
-    opacity: 0.5;
-    filter: brightness(2);
-  }
-  100% {
+.prompt-badge.expanded {
     width: 400px;
-    height: 400px;
+    z-index: 10;
+}
+
+.prompt-badge.collapsed .content {
+    animation: collapseContent 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes collapseContent {
+    0% {
+        transform: scaleY(1);
+        opacity: 1;
+        max-height: 500px;
+    }
+    100% {
+        transform: scaleY(0);
+        opacity: 0;
+        max-height: 0;
+    }
+}
+
+.prompt-badge .content {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transform-origin: top;
+    max-height: 500px;
+}
+
+.prompt-badge.expanded .content {
+    -webkit-line-clamp: unset;
+    animation: expandContent 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes expandContent {
+    0% {
+        transform: scaleY(0);
+        opacity: 0;
+        max-height: 0;
+    }
+    100% {
+        transform: scaleY(1);
+        opacity: 1;
+        max-height: 500px;
+    }
+}
+
+.prompt-badge .drag-handle {
+    cursor: grab;
+}
+
+.prompt-badge .drag-handle:active {
+    cursor: grabbing;
+}
+
+.prompt-badge .favorite-button {
     opacity: 0;
-    filter: brightness(1);
-  }
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.prompt-badge:hover .favorite-button {
+    opacity: 1;
+}
+
+.prompt-badge .favorite-button.active {
+    opacity: 1;
 }
 </style>

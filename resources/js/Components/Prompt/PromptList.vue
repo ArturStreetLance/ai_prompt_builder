@@ -15,7 +15,7 @@
       </n-button>
     </div>
 
-    <div class="!flex !flex-wrap gap-4">
+    <div class="flex flex-wrap gap-4">
       <PromptBadge
         v-for="prompt in prompts"
         :key="prompt.id"
@@ -67,33 +67,32 @@ defineEmits(['select', 'refresh', 'toggle-favorite'])
 const showCreateModal = ref(false)
 </script>
 
-<style scoped>
+<style>
 .prompt-enter-active,
 .prompt-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.3s ease-out;
 }
 
 .prompt-enter-from,
 .prompt-leave-to {
   opacity: 0;
-  transform: translateY(30px);
+  transform: translateY(2rem);
 }
 
-/* Стилизация скроллбара */
-div::-webkit-scrollbar {
-  height: 6px;
+::-webkit-scrollbar {
+  height: 0.375rem;
 }
 
-div::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-div::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background-color: rgba(156, 163, 175, 0.3);
   border-radius: 9999px;
 }
 
-div::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background-color: rgba(156, 163, 175, 0.5);
 }
 </style> 

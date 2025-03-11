@@ -6,9 +6,30 @@ use App\Models\Prompt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use App\Contracts\Services\PromptHistoryServiceInterface;
+use Inertia\Inertia;
 
 class PromptController extends Controller
 {
+    protected $promptHistoryService;
+
+    public function __construct(PromptHistoryServiceInterface $promptHistoryService)
+    {
+        $this->promptHistoryService = $promptHistoryService;
+    }
+
+    /**
+     * Отображение страницы с промптами
+     */
+    public function index()
+    {
+        return Inertia::render('Prompts/Index', [
+            'popularPrompts' => $this->promptHistoryService->getPopularPrompts(10),
+            'frequentPrompts' => $this->promptHistoryService->getUserFrequentPrompts(5),
+            'userPrompts' => Auth::user()->prompts()->latest()->get()
+        ]);
+    }
+
     /**
      * Создание нового промпта
      */
@@ -121,16 +142,9 @@ class PromptController extends Controller
             'promptIds' => 'array'
         ]);
 
-        // Здесь можно добавить логику сохранения комбинации промптов
-        // Например, сохранить в таблицу prompt_combinations
-
-        // Обновляем рейтинг для всех использованных промптов
         if (!empty($validated['promptIds'])) {
-            Prompt::whereIn('id', $validated['promptIds'])->each(function ($prompt) {
-                $prompt->increment('usage_count');
-                $prompt->rating = ($prompt->rating * ($prompt->usage_count - 1) + 5) / $prompt->usage_count;
-                $prompt->save();
-            });
+            // Используем сервис для записи использования промптов
+            $this->promptHistoryService->recordUsage($validated['promptIds'], $validated['content']);
         }
 
         return back()->with('message', 'Промпты успешно отправлены');

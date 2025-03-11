@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\PromptTemplateController;
 use App\Http\Controllers\Api\RatingController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Api\PromptSubmissionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -32,4 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('prompt-templates/{promptTemplate}/rate', [RatingController::class, 'rate']);
     Route::post('prompt-templates/compile', [PromptTemplateController::class, 'compile']);
     Route::get('prompt-templates/saved', [PromptTemplateController::class, 'saved']);
+    Route::post('/prompts/submit', [PromptSubmissionController::class, 'submit']);
+    Route::get('/prompts/popular', [PromptSubmissionController::class, 'getPopularPrompts']);
+    Route::get('/prompts/frequent', [PromptSubmissionController::class, 'getUserFrequentPrompts']);
 });

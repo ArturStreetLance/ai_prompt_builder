@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Contracts\Services\PromptHistoryServiceInterface;
+use App\Models\Prompt;
+use App\Models\PromptHistory;
+use App\Observers\PromptHistoryObserver;
+use App\Observers\PromptObserver;
+use App\Services\PromptHistoryService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +17,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(PromptHistoryServiceInterface::class, PromptHistoryService::class);
     }
 
     /**
@@ -19,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        PromptHistory::observe(PromptHistoryObserver::class);
+        Prompt::observe(PromptObserver::class);
     }
 }
